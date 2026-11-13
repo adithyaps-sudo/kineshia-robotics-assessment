@@ -191,3 +191,8 @@ A real hardware implementation would also require calibration, feedback control,
 - The application is designed for simulated operation.
 - Pick-and-place represents simulated object attachment and release.
 - Physical motor control and gripper operation are outside the scope of this implementation.
+## Demonstration Video
+
+Watch the 2-minute demonstration of the ROS 2 planar robotic arm, including live visualization, smooth trajectory execution, and pick-and-place operation.
+
+[▶ Watch Demonstration Video](https://drive.google.com/file/d/1pXYUFF_3y7MZquYjwaeKWGQZB9RBoOYV/view?usp=drive_link)
