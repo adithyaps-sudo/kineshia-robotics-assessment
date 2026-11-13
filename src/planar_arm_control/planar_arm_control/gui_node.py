@@ -283,6 +283,10 @@ class ArmWindow(QtWidgets.QMainWindow):
         self.sequence_state = "idle"
         self.sequence_motion_started = False
 
+        # Simulated pick-and-place object.
+        self.object_state = "waiting"
+        self.object_position = np.array([4.0, 2.0])
+
         self.build_ui()
 
         self.plot_timer = QtCore.QTimer(self)
@@ -511,6 +515,27 @@ class ArmWindow(QtWidgets.QMainWindow):
             symbolSize=18,
             symbolPen=pg.mkPen("#F5B942", width=3)
         )
+
+        # Simulated cube: waiting, attached, or released.
+        self.object_marker = pg.ScatterPlotItem(
+            size=19,
+            symbol="s",
+            pen=pg.mkPen("#FFFFFF", width=2),
+            brush=pg.mkBrush("#E65B5B")
+        )
+        self.arm_plot.addItem(self.object_marker)
+
+        self.object_label = pg.TextItem(
+            text="PICK OBJECT",
+            color="#F5B942",
+            anchor=(0.5, 1.2)
+        )
+        self.arm_plot.addItem(self.object_label)
+
+        self.object_marker.setData(
+            x=[4.0], y=[2.0]
+        )
+        self.object_label.setPos(4.0, 2.0)
 
         left.addWidget(self.arm_plot, 3)
 
@@ -749,6 +774,15 @@ class ArmWindow(QtWidgets.QMainWindow):
         self.sequence_state = "to_pick"
         self.sequence_motion_started = False
 
+        self.object_state = "waiting"
+        self.object_position = np.array([4.0, 2.0])
+        self.object_marker.setData(
+            x=[4.0], y=[2.0],
+            brush=pg.mkBrush("#E65B5B")
+        )
+        self.object_label.setText("PICK OBJECT")
+        self.object_label.setPos(4.0, 2.0)
+
         self.set_controls_enabled(False)
 
         self.node.set_local_status(
@@ -778,6 +812,7 @@ class ArmWindow(QtWidgets.QMainWindow):
             if self.sequence_state == "to_pick":
 
                 self.sequence_state = "pick_pause"
+                self.object_state = "attached"
 
                 self.node.set_local_status(
                     "PICK: Object attached (simulated)."
@@ -791,6 +826,15 @@ class ArmWindow(QtWidgets.QMainWindow):
             elif self.sequence_state == "to_place":
 
                 self.sequence_state = "place_pause"
+                self.object_state = "released"
+
+                # Keep the object at the final end-effector position.
+                q, _ = self.node.get_snapshot()
+                if q is not None:
+                    points = self.node.arm.forward_kinematics(q)
+                    self.object_position = np.array(
+                        points[-1], dtype=float
+                    )
 
                 self.node.set_local_status(
                     "PLACE: Object released (simulated)."
@@ -875,6 +919,41 @@ class ArmWindow(QtWidgets.QMainWindow):
         # End-effector position.
         end_x, end_y = points[-1]
 
+        # While attached, the cube follows the live end-effector.
+        if self.object_state == "attached":
+            self.object_position = np.array(
+                [end_x, end_y], dtype=float
+            )
+
+        object_colors = {
+            "waiting": "#E65B5B",
+            "attached": "#39C98A",
+            "released": "#62C8F5"
+        }
+
+        object_labels = {
+            "waiting": "PICK OBJECT",
+            "attached": "GRIPPED",
+            "released": "PLACED"
+        }
+
+        object_x, object_y = self.object_position
+
+        self.object_marker.setData(
+            x=[object_x],
+            y=[object_y],
+            brush=pg.mkBrush(
+                object_colors[self.object_state]
+            )
+        )
+
+        self.object_label.setText(
+            object_labels[self.object_state]
+        )
+        self.object_label.setPos(
+            object_x, object_y
+        )
+
         self.metric_x.value_label.setText(
             f"{end_x:.3f} m"
         )
@@ -910,10 +989,18 @@ class ArmWindow(QtWidgets.QMainWindow):
                 [mount_start[1], end_y]
             )
 
-            finger_1_root = finger_root + 0.11 * perpendicular
-            finger_1_tip = finger_tip + 0.19 * perpendicular
-            finger_2_root = finger_root - 0.11 * perpendicular
-            finger_2_tip = finger_tip - 0.19 * perpendicular
+            # Narrow finger spacing while carrying the object.
+            if self.object_state == "attached":
+                root_gap = 0.045
+                tip_gap = 0.075
+            else:
+                root_gap = 0.11
+                tip_gap = 0.19
+
+            finger_1_root = finger_root + root_gap * perpendicular
+            finger_1_tip = finger_tip + tip_gap * perpendicular
+            finger_2_root = finger_root - root_gap * perpendicular
+            finger_2_tip = finger_tip - tip_gap * perpendicular
 
             self.gripper_curve.setData(
                 [
